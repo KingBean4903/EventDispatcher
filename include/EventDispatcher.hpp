@@ -19,7 +19,7 @@ namespace EventSystem {
 	class IEventCallbackList {
 		
 		public:
-			virtual ~IEventCallback() = default;
+			virtual ~IEventCallbackList() = default;
 
 	};
 
@@ -42,7 +42,7 @@ namespace EventSystem {
 				callbacks.erase(token);
 			}
 			
-			void remove(SubscriptionToken token){
+			void dispatch(const EventType& event){
 				std::lock_guard lock(mutex);
 				for (const auto&[_, cb] : callbacks) {
 							cb(event);
@@ -52,14 +52,14 @@ namespace EventSystem {
 		private:
 			mutable  std::shared_mutex mutex;
 			std::unordered_map<SubscriptionToken, Callback> callbacks;
-			std::atomic<SubscriptionToken> nextToken(1);
+			std::atomic<SubscriptionToken> nextToken{1};
 	};
 
 	class EventDispatcher {
 		
 		public:
 			~EventDispatcher() {
-					stopAsycnDispatcher();
+					stopAsyncDispatcher();
 			}
 
 			template<typename EventType>
@@ -67,7 +67,7 @@ namespace EventSystem {
 			{
 					auto typeId = std::type_index(typeid(EventType));
 					std::lock_guard lock(mapMutex);
-					if (subscribers.find(typeid) == subscribers.end()) {
+					if (subscribers.find(typeId) == subscribers.end()) {
 							subscribers[typeId] = std::make_unique<EventCallbackList<EventType>>();
 					}
 					auto* list = static_cast<EventCallbackList<EventType>*>(subscribers[typeId].get());
@@ -76,7 +76,7 @@ namespace EventSystem {
 
 			template<typename EventType>
 			void unsubscribe(SubscriptionToken token) {
-				auto typeId = std::type_index(typeId(EventType));
+				auto typeId = std::type_index(typeid(EventType));
 				std::lock_guard lock(mapMutex);
 				auto it = subscribers.find(typeId);
 				if (it != subscribers.end()) {
@@ -87,9 +87,9 @@ namespace EventSystem {
 
 			template<typename EventType>
 			void dispatch(const EventType& event) const {
-					auto typeId = std::type_index(typeId(EventType));
+					auto typeId = std::type_index(typeid(EventType));
 					std::shared_lock lock(mapMutex);
-					auto it = subscribers.fine(typeId);
+					auto it = subscribers.find(typeId);
 					if (it != subscribers.end()) {
 							auto* list = static_cast<EventCallbackList<EventType>*>(it->second.get());
 							list->dispatch(event);
@@ -115,7 +115,7 @@ namespace EventSystem {
 			});
 
 	}
-			void stopAsyncDispatch() {
+			void stopAsyncDispatcher() {
 				{
 					 std::lock_guard lock(queueMutex);
 					 running = false;
@@ -160,7 +160,7 @@ namespace EventSystem {
 					std::lock_guard lock(queueMutex);
 					eventQueue.push(std::move(job));
 					}
-				queueCV.notifiy_one();
+				queueCV.notify_one();
 			}
 		
 };
